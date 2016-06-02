@@ -1,5 +1,6 @@
 # LIBRARIES
     library(caret) 
+    library(pROC)
     source('helper.R')
 # LOAD DATA
     setwd("C:/Users/steve/OneDrive/Documents/BootCamp/Kaggle")
@@ -46,8 +47,13 @@
 
 #GBM MODEL
     # Trainer control and expansion grid, train and predict
-        gbm.ctrl = trainControl(method = 'repeatedcv',number = 5, summaryFunction = AMS_summary)
-        gbm.Grid = expand.grid(interaction.depth = c(1, 5, 9), shrinkage = 0.1,n.minobsinnode = 10)
+        gbm.ctrl = trainControl(method = 'repeatedcv',
+                                number = 5, 
+                                summaryFunction = AMS_summary)
+        gbm.Grid = expand.grid(n.trees = c(50,100,150), 
+                               interaction.depth = c(1, 5, 9), 
+                               shrinkage = 0.1,
+                               n.minobsinnode = 10)
         gbm.model = train(x = train.sub.scaled, y = train.labels, method = 'gbm', weights = train.weight,
                           verbose = TRUE, trControl = gbm.ctrl, tuneGrid = gbm.Grid, metric = 'AMS')
         
@@ -57,37 +63,75 @@
         
     # Test Prediction
         gbm.pred.test = predict(gbm.model, newdata = test.sub, type = 'prob')
+   
+        auc.labels <- ifelse(as.character(train.labels)=="s", 1, 0)
+        auc = roc(auc.labels, gbm.pred[,2])
+        plot(auc, print.thres=TRUE)
         
-        sThreshold = .002
+        gbm.sThreshold = .0001
         gbm.predicted = rep('b', length(gbm.pred.test[,2]))
-        gbm.predicted[gbm.pred.test[,2] >= sThreshold] = 's'
+        gbm.predicted[gbm.pred.test[,2] >= gbm.sThreshold] = 's'
     
-        tbl.result = table(truth = test.labels, pred = gbm.predicted)
-        misclassed = (tbl.result['b','s'] + tbl.result['s','b']) / subsetSize
-        misclassed
+        gbm.tbl.result = table(truth = test.labels, pred = gbm.predicted)
+        gbm.misclassed = (tbl.result['b','s'] + tbl.result['s','b']) / subsetSize
+        gbm.misclassed
 
 #RANDOM FOREST MODEL
-    rf.ctrl = trainControl()
-    rf.Grid = expand.grid()
-    rf.model = train(x = train.sub.scaled, y=train.labels, method = 'rf', weight = train.weight,
-                     verbose = TRUE, trControl = rf.ctrl, tuneGrid = rf.grid, metric = 'AMS')
+    # Trainer control and expansion grid, train and predict
+        rf.ctrl = trainControl(method = 'repeatedcv',
+                               number = 5, 
+                               summaryFunction = AMS_summary)
+        rf.Grid = expand.grid(mtry = c(3,6,9))
+        rf.model = train(x = train.sub.scaled, y=train.labels, method = 'rf', weight = train.weight,
+                         verbose = TRUE, trControl = rf.ctrl, tuneGrid = rf.Grid, metric = 'AMS')
 
-    rf.model
-    plot(rf.model)
+        rf.model
+        plot(rf.model)
+    # Test Prediction
+        rf.pred.test = predict(rf.model, newdata = test.sub, type = 'prob')
+        
+        auc = roc(auc.labels, gbm.pred[,2])
+        plot(auc, print.thres=TRUE)
+        
+        rf.sThreshold = .0001
+        rf.predicted = rep('b', length(rf.pred.test[,2]))
+        rf.predicted[rf.pred.test[,2] >= rf.sThreshold] = 's'
+        
+        rf.tbl.result = table(truth = test.labels, pred = gbm.predicted)
+        rf.misclassed = (tbl.result['b','s'] + tbl.result['s','b']) / subsetSize
+        print('GBM: ' + gbm.misclassed)
+        print('RF: ' + rf.misclassed)
     
-    
-    
-# Kaggle Test Set ---->
+        
+        
+        
+# Test Models against Kaggle Test Set ---->
     test = read.csv('data/test.csv') 
     test[test==-999.0] <- NA
     test$PRI_jet_num <- test$PRI_jet_num
     test <- test[,-1]
     
+    gbm.kaggle.test = predict(gbm.model, newdata = test, type= 'prob')
+    gbm.kaggle.pred = rep('b',length(gbm.kaggle.test[,2]))
+    gbm.kaggle.pred[gbm.kaggle.test[,2]>=gbm.sThreshold] = 's'
+
+    rf.kaggle.test = predict(rf.model, newdata = test, type = 'prob')
     
     
-# Set up submission    
-    weightRank = rank(pred.test[,2], ties.method = 'random')
     
+    
+    
+    
+# Set up submission  
+    usePredModel = gbm.pred.test
+    
+    final.predicted <- rep("b",550000)
+    final.predicted[usePredModel[,2]>=threshold] <- "s"
+    final.weightRank = rank(usePredModel[,2], ties.method= "random")
+    
+    submission = data.frame(EventId = testId, RankOrder = final.weightRank, Class = final.predicted)
+    
+    write.csv(submission, "gbm_submission.csv", row.names=FALSE)
     
     
     
