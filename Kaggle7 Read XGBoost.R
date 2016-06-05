@@ -25,25 +25,25 @@ source('helper.R')
                         summaryFunction = AMS_summary)
 
     xgb.grid <- expand.grid(nrounds = 300,
-                           max_depth = 6,
-                           eta = c(.01,.3),                   #shrinkage
-                           gamma = c(0,.1,.3),            #min loss reduction
+                           max_depth = 4,
+                           eta = .8,                   #shrinkage
+                           gamma = 1,            #min loss reduction
                            colsample_bytree = .7,            #subsample ratio of columns
                            min_child_weight = 1)             #min sum of instance weight
                    
     
-    xgb.model <- train(x = sub.train, y = sub.label, method = 'xgbTree', weights = sub.weight, 
-                       verbose = TRUE, trControl = xgb.ctrl, tuneGrid = xgb.grid, metric = 'AMS',
+    xgb.model <- train(x = sub.train, y = sub.label, method = 'rf', 
+                       trControl = xgb.ctrl, tuneGrid = xgb.grid, 
                        preProc=c('center','scale'))
     
     xgb.model
     
-    png("xgbmodel5.png", width=6, height=4, units="in", res=300)
+    png("xgbmodel6.png", width=6, height=4, units="in", res=300)
     plot(xgb.model)
     dev.off() #only 129kb in size
     
     
-    saveRDS(xgb.model,'xgbResults5.rds')
+    saveRDS(xgb.model,'xgbResults6.rds')
 
     
 # NOW PREDICT AGAINST 20% DATA    
@@ -57,7 +57,7 @@ source('helper.R')
     plot(auc,print.thres=TRUE)
     
     # Get threshold from above plot
-    Threshold = .346
+    Threshold = .338
     predicted = rep('b',length(test.pred[,2]))
     predicted[test.pred[,2]>= Threshold] = 's'
     accuracy.tbl = table(truth = test.label, pred = predicted)
